@@ -15,9 +15,10 @@ function processS3Events(event, modules, callback=null) {
   };
   s3.getObject(params, (error, data)=>{
     if (error)
-      console.log(err, err.stack);
+      console.log(error, error.stack);
     else {
       let lines = data.Body.toString().split("\n");
+      console.log(lines[0]);
       callback(params.Key, lines);
     }
   });
@@ -25,6 +26,33 @@ function processS3Events(event, modules, callback=null) {
   console.log('end of main');
   return true;
 };
+
+// 2016-02-19T07:51:48.940573Z bluegreen-haproxy-live 54.238.207.205:42994 10.67.2.23:13497 0.002432 0.000011 0.000013 - - 185 8386
+
+const ELBLogFormat = /^(\S+) (\S+) (\S+):(\S+) (\S+):(\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+)$/;
+
+function parseELBLog(modules, key, line) {
+  let ret = {};
+  if (line == '')
+    return ret;
+  const matched = line.match(ELBLogFormat);
+  if (matched) {
+    let [_, datetime, elbname, srcaddr, srcport, destaddr, destport, t1, t2, t3, x, y, z, size] = matched;
+    ret.datetime = datetime;
+    const m = modules.moment.utc(datetime);
+    ret.timestamp = m.unix();
+    ret.srcaddr = srcaddr;
+    ret.srcport = srcport;
+    ret.elbname = elbname;
+    ret.destaddr = destaddr;
+    ret.destport = destport;
+    ret.request_time = t1;
+    ret.size = size;
+  } else {
+    console.log(`log didn't match regexp '${line}'`);
+  }
+  return ret;
+}
 
 const S3LogFormat = /^(\S+) (\S+) \[(.+)\] (\S+) (\S+) (\S+) (\S+) (\S+) "([^"]+)" (\S+) (\S+) (\d+|\-) (\d+|\-) (\d+|\-) (\d+|\-) "([^"]+)" "([^"]+)" (\S+).*/;
 
@@ -71,8 +99,7 @@ function parseS3Log(modules, key, line) {
 
 function processFile(event, context, modules, config, key, tag, lines, parseFunc){
   const request = modules.request;
-  const data = lines.map((line)=>parseFunc(modules, key, line))
-    .filter((r)=>r.key);
+  const data = lines.map((line)=>parseFunc(modules, key, line)).filter((h)=>h.timestamp);
 
   const options = {
     uri: `${config.fluentd_url}${tag}`,
@@ -99,17 +126,20 @@ function processFile(event, context, modules, config, key, tag, lines, parseFunc
 
 function sendAwsLogsToFluentd(event, context, modules, config) {
   processS3Events(event, modules, (key, lines)=>{
+    let processed = false;
     config.parsers.forEach((a)=>{
       let [matcher, parseFunc, tag] = a;
       if (matcher.exec(key)) {
         processFile(event, context, modules, config, key, tag, lines, parseFunc);
-        return ;
+        processed = true;
       }
-    })
-    context.fail(`unknown key ${key}`)
+    });
+    if (!processed)
+      context.fail(`unknown key ${key}`);
   });
-};
+}
 
 exports.processS3Events = processS3Events;
 exports.parseS3Log = parseS3Log;
+exports.parseELBLog = parseELBLog;
 exports.sendAwsLogsToFluentd = sendAwsLogsToFluentd;

@@ -132,6 +132,27 @@ describe('AwsLogsToFluentd#main', ()=>{
     })
   });
 
+  describe('#parseELBLog', ()=>{
+    const key ='elb/logs/product-files/2016-01-12-03-46-05-XXXXXXXXXX';
+
+    it('should define function', ()=>{
+      assert.equal('function', typeof main.parseELBLog);
+    });
+    it('should return {} for null line', ()=>{
+      assert.deepEqual({}, main.parseELBLog(modules, key, ''));
+    });
+    it('should parse s3 log', ()=>{
+      const line = '2016-02-19T07:51:48.940573Z bluegreen-haproxy-live 54.238.207.205:42994 10.67.2.23:13497 0.002432 0.000011 0.000013 - - 185 8386';
+      const ret = main.parseELBLog(modules, key, line);
+      const d = moment.utc('2016-02-19 07:51:48');
+      assert.equal('2016-02-19T07:51:48.940573Z', ret.datetime);
+      assert.equal(d.unix(), ret.timestamp);
+      assert.equal('54.238.207.205', ret.srcaddr);
+      assert.equal('42994', ret.srcport);
+      assert.equal(8386, ret.size);
+    });
+  });
+
   describe('#parseS3Log', ()=>{
     const key ='s3/logs/product-files/2016-01-12-03-46-05-XXXXXXXXXX';
 
