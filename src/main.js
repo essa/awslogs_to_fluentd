@@ -108,17 +108,19 @@ function processFile(event, context, modules, config, key, tag, lines, parseFunc
     uri: `${config.fluentd_url}${tag}`,
     headers: {
       "Content-Type": "application/json",
+      "Authorization": config.authorization
     },
     body: JSON.stringify(data)
   };
   if (data.length > 0) {
-    console.log(`sending ${data.length} data to Insights`); request.post(options, (error, response, body)=>{
+    console.log(`sending ${data.length} data to fluentd`); request.post(options, (error, response, body)=>{
       if (!error && response.statusCode == 200) {
         //console.log(`success response=${JSON.stringify(response)} body=${body}`);
         context.succeed('success');
       } else {
         console.log(`error ${error}`);
-        context.fail(`Insights api returns error ${error}`);
+        console.log(response.statusCode);
+        context.fail(`fluentd api returns error ${error}`);
       }
     });
   } else {
