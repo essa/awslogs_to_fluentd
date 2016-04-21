@@ -1,22 +1,24 @@
 'use strict';
 
-
 function processS3Events(event, modules, callback=null) {
   const s3 = modules.s3;
   const request = modules.request;
   const moment = modules.moment;
 
-  console.log('start main');
   var r = event.Records[0];
 
+  console.log('start main');
   var params = {
     Bucket: r.s3.bucket.name,
     Key: r.s3.object.key
   };
   s3.getObject(params, (error, data)=>{
+    
+    console.log('callback');
     if (error)
       console.log(error, error.stack);
     else {
+
       let lines = data.Body.toString().split("\n");
       console.log(lines[0]);
       callback(params.Key, lines);
@@ -25,15 +27,15 @@ function processS3Events(event, modules, callback=null) {
 
   console.log('end of main');
   return true;
-};
+}
 
 // 2016-02-19T07:51:48.940573Z bluegreen-haproxy-live 54.238.207.205:42994 10.67.2.23:13497 0.002432 0.000011 0.000013 - - 185 8386
 
-const ELBLogFormat = /^(\S+) (\S+) (\S+):(\S+) (\S+):(\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+)$/;
+const ELBLogFormat = /^(\S+) (\S+) (\S+):(\S+) (\S+):(\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+)/;
 
 function parseELBLog(modules, key, line) {
   let ret = {};
-  if (line == '')
+  if (line === '')
     return ret;
   const matched = line.match(ELBLogFormat);
   if (matched) {
@@ -63,7 +65,7 @@ function parseDateTime(moment, t) {
 
 function parseS3Log(modules, key, line) {
   let ret = {};
-  if (line == '')
+  if (line === '')
     return ret;
 
   const matched = line.match(S3LogFormat);
@@ -74,6 +76,7 @@ function parseS3Log(modules, key, line) {
     ret.bucket = bucket;
     const t = parseDateTime(modules.moment, time);
     ret.timestamp = t.unix();
+    ret['@timestamp'] = t.format();
     ret.datetime = t.format();
     ret.remoteAddr = remoteAddr;
     ret.requester = requester;
@@ -95,7 +98,7 @@ function parseS3Log(modules, key, line) {
     console.log(`log didn't match regexp '${line}'`);
   }
   return ret;
-};
+}
 
 function processFile(event, context, modules, config, key, tag, lines, parseFunc){
   const request = modules.request;
@@ -115,7 +118,7 @@ function processFile(event, context, modules, config, key, tag, lines, parseFunc
         context.succeed('success');
       } else {
         console.log(`error ${error}`);
-        context.fail(`Insights api returns error ${error}`)
+        context.fail(`Insights api returns error ${error}`);
       }
     });
   } else {
@@ -125,6 +128,7 @@ function processFile(event, context, modules, config, key, tag, lines, parseFunc
 }
 
 function sendAwsLogsToFluentd(event, context, modules, config) {
+  console.log(config);
   processS3Events(event, modules, (key, lines)=>{
     let processed = false;
     config.parsers.forEach((a)=>{
